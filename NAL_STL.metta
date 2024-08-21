@@ -115,3 +115,67 @@
 !(□ ϕ from 1 to 10 at 0)
 !(□TV ϕ from 1 to 10 at 0)
 !(◊TV ϕ from 1 to 10 at 0)
+
+
+;; NEW ADDITION: GET SETS OF POINTS WHICH WOULD NEED TO BE DIFFERENT TO MAKE FORMULA TRUE/FALSE
+
+;which values would need to be different to make ϕ hold for all t in [a,b]?
+(= (∀MakeTrueValues $ϕ from $a to $b)
+   (If (not (> $a $b))
+       (superpose ((If (not ($ϕ $a)) $a)
+                   (∀MakeTrueValues $ϕ from (+ $a 1) to $b)))))
+
+;which value would need to be different to make ϕ hold for any t in [a,b]? (currently just returns the first)
+(= (∃MakeTrueValues $ϕ from $a to $b)
+   (If (not (∃x $ϕ from $a to $b))
+       (If (not (> $a $b))
+           (If (not ($ϕ $a)) 
+               $a
+               (∃MakeTrueValues $ϕ from (+ $a 1) to $b)))))
+               
+;which values would need to be different to make ϕ violated for any t in [a,b]?
+(= (∀MakeFalseValues $ϕ from $a to $b)
+   (If (∀x $ϕ from $a to $b)
+       (If (not (> $a $b))
+           (If ($ϕ $a)
+                $a
+                (∀MakeFalseValues $ϕ from (+ $a 1) to $b)))))
+
+;which value would need to be different to make ϕ violated for all t in [a,b]? (currently just returns the first)
+(= (∃MakeFalseValues $ϕ from $a to $b)
+   (If (not (> $a $b))
+       (superpose ((If ($ϕ $a) $a)
+                   (∃MakeFalseValues $ϕ from (+ $a 1) to $b)))))
+
+(= (S- $Op $ϕ from $a to $b at $t)
+   (let $res (If (== $Op □)
+                 (collapse (∀MakeTrueValues $ϕ from (+ $t $a) to (+ $t $b)))
+                 (If (== $Op ◊)
+                     (collapse (∃MakeTrueValues $ϕ from (+ $t $a) to (+ $t $b)))))
+             (If (== $res ())
+                 (range (+ $t $a) (+ $t $b))
+                 $res)))
+
+(= (S+ $Op $ϕ from $a to $b at $t)
+   (let $res (If (== $Op □)
+                 (collapse (∀MakeFalseValues $ϕ from (+ $t $a) to (+ $t $b)))
+                 (If (== $Op ◊)
+                     (collapse (∃MakeFalseValues $ϕ from (+ $t $a) to (+ $t $b)))))
+             (If (== $res ())
+                 (range (+ $t $a) (+ $t $b))
+                 $res)))
+
+!(NEW_ADDITIONS!!!)
+
+!(□ ϕ from 1 to 15 at 0)
+!(S+ □ ϕ from 1 to 15 at 0)
+!(S- □ ϕ from 1 to 15 at 0)
+!(NEXT)
+!(S+ ◊ ϕ from 11 to 15 at 0)
+!(S- ◊ ϕ from 11 to 15 at 0)
+!(NEXT)
+!(S+ □ ϕ from 1 to 9 at 0)
+!(S- □ ϕ from 1 to 9 at 0)
+!(NEXT)
+!(S+ ◊ ϕ from 1 to 15 at 0)
+!(S- ◊ ϕ from 1 to 15 at 0)
