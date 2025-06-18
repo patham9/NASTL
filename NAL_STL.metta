@@ -11,6 +11,13 @@
    (If (< $K $N)
        (TupleConcat ($K) (range (+ $K 1) $N)) ()))
 
+(= (firstTrue $ψ from $a to $b)
+   (If (> $a $b)
+       none
+       (If ($ψ $a)
+           $a
+           (firstTrue $ψ from (+ 1 $a) to $b))))
+
 ;; PROPOSITIONAL LOGIC ;;
 
 (= (∧ $P $Q)
@@ -41,11 +48,21 @@
        (or ($ϕ $a) (∃x $ϕ from (+ 1 $a) to $b))))
 
 ;count true
-(= (Cx $ϕ from $a to $b)
+(= (Tx $ϕ from $a to $b)
    (If (> $a $b)
-       0
-       (let $cnt (If ($ϕ $a) 1 0)
-            (+ $cnt (Cx $ϕ from (+ 1 $a) to $b)))))
+       ()
+       (let $rest (Tx $ϕ from (+ 1 $a) to $b)
+            (If ($ϕ $a)
+                (TupleConcat ($a) $rest)
+                $rest))))
+
+(= (Fx $ϕ from $a to $b)
+   (If (> $a $b)
+       ()
+       (let $rest (Fx $ϕ from (+ 1 $a) to $b)
+            (If (not ($ϕ $a))
+                (TupleConcat ($a) $rest)
+                $rest))))
 
 ;; SIGNAL TEMPORAL LOGIC ;;
 
@@ -65,36 +82,35 @@
 
 ;; SIGNAL TEMPORAL NAL
 
-;; Truth functions
-(= (Truth_c2w $c) (/ $c (- 1 $c)))
-(= (Truth_w2c $w) (/ $w (+ $w 1)))
-(= (Truth_Revision ($f1 $c1) ($f2 $c2)) 
-   (let* (($w1 (Truth_c2w $c1)) ($w2 (Truth_c2w $c2)) ($w  (+ $w1 $w2))
-          ($f (/ (+ (* $w1 $f1) (* $w2 $f2)) $w)) ($c (Truth_w2c $w)))
-          ((min 1.00 $f) (min 0.99 (max (max $c $c1) $c2)))))
-(= (Truth_Expectation ($f $c)) (+ (* $c (- $f 0.5)) 0.5))
-(= (Truth_Observation None) (0.0 0.0))
-(= (Truth_Observation True) (1.0 0.9))
-(= (Truth_Observation False) (0.0 0.9))
-;globally with uncertainty
-(= (TVx $ϕ from $a to $b)
-   (If (> $a $b)
-       (Truth_Observation None)
-       (Truth_Revision (Truth_Observation ($ϕ $a)) 
-                       (TVx $ϕ from (+ $a 1) to $b))))
+; Temporal ops with NAL truth value
+
+(= (Truth_w2TV $wp $w)
+   ((/ $wp $w)
+    (/ $w (+ $w 1))))
 
 ;globally
 (= (□TV $ϕ from $a to $b at $t)
-   (TVx $ϕ from (+ $t $a) to (+ $t $b)))
+   ((Tx $ϕ from (+ $t $a) to (+ $t $b))
+    (range (+ $t $a) (+ 1 (+ $t $b)))))
 
 ;finally
 (= (◊TV $ϕ from $a to $b at $t)
-   (1.0 (Truth_w2c (Cx $ϕ from (+ $t $a) to (+ $t $b)))))
+   (let $ival (range (+ $t $a) (+ (+ $t $b) 1))
+        (If (◊ $ϕ from $a to $b at $t)
+            ($ival ())
+            (range (+ $t $a) (+ 1 (+ $t $b))))))
 
+;until
 (= (𝒰TV $ϕ $ψ from $a to $b at $t)
-   (collapse (let* (($I (range (+ $t $a) (+ $t $b)))
-                         ($y (superpose $I)))
-                        (Truth_Observation (and ($ψ $y) (∀x $ϕ from $t to $y))))))
+   (let $ts (firstTrue $ψ from (+ $t $a) to (+ $t $b))
+        (If (== $ts none)
+            (() (range $t (+ (+ $t $b) 1))) ;all false from t till t+b
+            ((TupleConcat (range (+ 1 $ts) (+ (+ $t $b) 1)) ;true from ts+1 to t+b
+                          (Tx $ϕ from $t to $ts)) ;points where ϕ holds within t and ts-1
+             (range $t (+ 1 (+ $t $b))))))) ;points where ϕ does not hold within t and ts
+
+
+
 
 ;; EXAMPLE ;;
 
@@ -102,80 +118,77 @@
 (= (ϕ $t) (< (x $t) 10))
 (= (ψ $t) (< (x $t) 20))
 
-!(□ ϕ from 1 to 4 at 0)
+;!(□ ϕ from 1 to 10 at 0)
+;!(let* (($I (range 1 6))
+;        ($t (superpose $I)))
+;       (□ ϕ from 1 to 5 at $t))
+;!(□ ϕ from 1 to 10 at 0)
+;!(𝒰 ϕ ψ from 0 to 13 at 5)
+;!(□ ϕ from 1 to 10 at 0)
 
-!(let* (($I (range 1 6))
-        ($t (superpose $I)))
-       (□ ϕ from 1 to 5 at $t))
+;!(□TV ϕ from 1 to 10 at 0)
+;!(◊TV ϕ from 1 to 10 at 0)
+;!(𝒰TV ϕ ψ from 1 to 10 at 0)
 
-!(□ ϕ from 1 to 10 at 0)
+(= (∧TV ($pp1 $ptotal1) ($pp2 $ptotal2))
+   ((collapse (intersection (superpose $pp1) (superpose $pp2)))
+    (unique (union $ptotal1 $ptotal2))))
 
-!(𝒰 ϕ ψ from 0 to 13 at 5)
+(= (TupleCount $tuple) (If (== $tuple ()) 0 (+ 1 (TupleCount (cdr-atom $tuple)))))
 
-!(□ ϕ from 1 to 10 at 0)
-!(□TV ϕ from 1 to 10 at 0)
-!(◊TV ϕ from 1 to 10 at 0)
+(= (Truth_fromSets ($P $T))
+   (Truth_w2TV (TupleCount $P) (TupleCount $T)))
 
+(= (𝒰TV_nested_helper ($ϕL $ϕ) $ψ from $a to $b at $t)
+   (let $ts (firstTrue $ψ from (+ $t $a) to (+ $t $b)) ;last component ( $ψ )
+        (If (not (== $ts none))
+            (If (== $ϕL ())
+                (TupleConcat (range (+ 1 $ts) (+ (+ $t $b) 1)) ;ts onwards plus
+                             (Tx $ϕ from (+ $t $a) to (+ $t $ts)))    ;prior points where $ϕ holds
+                (𝒰TV_nested_helper $ϕL $ϕ from $a to $ts at $t)))))
 
-;; NEW ADDITION: GET SETS OF POINTS WHICH WOULD NEED TO BE DIFFERENT TO MAKE FORMULA TRUE/FALSE
+(= (𝒰TV_nested ($ϕL $ϕ) $ψ from $a to $b at $t)
+   ((𝒰TV_nested_helper ($ϕL $ϕ) $ψ from $a to $b at $t)
+    (range $t (+ $t (+ 1 $b)))))
 
-;which values would need to be different to make ϕ hold for all t in [a,b]?
-(= (∀MakeTrueValues $ϕ from $a to $b)
-   (If (not (> $a $b))
-       (superpose ((If (not ($ϕ $a)) $a)
-                   (∀MakeTrueValues $ϕ from (+ $a 1) to $b)))))
+;!(Truth_fromSets (□TV safe from 0 to 179 at 0))
+;!(Truth_fromSets (𝒰TV_nested ((() A) B) C from 0 to 179 at 0))
+;!(Truth_fromSets (∧TV (□TV safe from 0 to 179 at 0) (𝒰TV_nested ((() A) B) C from 0 to 179 at 0)))
 
-;which value would need to be different to make ϕ hold for any t in [a,b]? (currently just returns the first)
-(= (∃MakeTrueValues $ϕ from $a to $b)
-   (If (not (∃x $ϕ from $a to $b))
-       (If (not (> $a $b))
-           (If (not ($ϕ $a)) 
-               $a
-               (∃MakeTrueValues $ϕ from (+ $a 1) to $b)))))
-               
-;which values would need to be different to make ϕ violated for any t in [a,b]?
-(= (∀MakeFalseValues $ϕ from $a to $b)
-   (If (∀x $ϕ from $a to $b)
-       (If (not (> $a $b))
-           (If ($ϕ $a)
-                $a
-                (∀MakeFalseValues $ϕ from (+ $a 1) to $b)))))
+!(□TV safe from 0 to 179 at 0)
+!(𝒰TV_nested ((() A) B) C from 0 to 179 at 0)
 
-;which value would need to be different to make ϕ violated for all t in [a,b]? (currently just returns the first)
-(= (∃MakeFalseValues $ϕ from $a to $b)
-   (If (not (> $a $b))
-       (superpose ((If ($ϕ $a) $a)
-                   (∃MakeFalseValues $ϕ from (+ $a 1) to $b)))))
+!(Truth_fromSets (∧TV (□TV safe from 0 to 179 at 0)
+                      (𝒰TV_nested ((() A) B) C from 0 to 179 at 0)))
 
-(= (S- $Op $ϕ from $a to $b at $t)
-   (let $res (If (== $Op □)
-                 (collapse (∀MakeTrueValues $ϕ from (+ $t $a) to (+ $t $b)))
-                 (If (== $Op ◊)
-                     (collapse (∃MakeTrueValues $ϕ from (+ $t $a) to (+ $t $b)))))
-             (If (== $res ())
-                 (range (+ $t $a) (+ $t $b))
-                 $res)))
+;!(Truth_fromSets (∧TV (𝒰TV A B from 0 to 179 at 0) (𝒰TV B C from 0 to 179 at 0)))
+;!(𝒰TV B C from 0 to 179 at 0)
+;!(Truth_fromSets (∧TV (□TV safe from 0 to 179 at 0)
+;                      (∧TV (𝒰TV A B from 0 to 179 at 0) (𝒰TV B C from 0 to 179 at 0))))
 
-(= (S+ $Op $ϕ from $a to $b at $t)
-   (let $res (If (== $Op □)
-                 (collapse (∀MakeFalseValues $ϕ from (+ $t $a) to (+ $t $b)))
-                 (If (== $Op ◊)
-                     (collapse (∃MakeFalseValues $ϕ from (+ $t $a) to (+ $t $b)))))
-             (If (== $res ())
-                 (range (+ $t $a) (+ $t $b))
-                 $res)))
+;!(𝒰TV safeA safeB from 0 to 9 at 0)
+;!(□TV safeA from 0 to 9 at 0)
+;!(□TV safeB from 0 to 9 at 0)
 
-!(NEW_ADDITIONS!!!)
+;!(∧TV (□TV A from 0 to 179 at 0) (□TV B from 0 to 179 at 0))
+;!(∧TV (𝒰TV A B from 0 to 179 at 0) (□TV safe from 0 to 9 at 0))
 
-!(□ ϕ from 1 to 15 at 0)
-!(S+ □ ϕ from 1 to 15 at 0)
-!(S- □ ϕ from 1 to 15 at 0)
-!(NEXT)
-!(S+ ◊ ϕ from 11 to 15 at 0)
-!(S- ◊ ϕ from 11 to 15 at 0)
-!(NEXT)
-!(S+ □ ϕ from 1 to 9 at 0)
-!(S- □ ϕ from 1 to 9 at 0)
-!(NEXT)
-!(S+ ◊ ϕ from 1 to 15 at 0)
-!(S- ◊ ϕ from 1 to 15 at 0)
+;todo in mettamorph
+;(= (intersection $a $a) $a)
+
+;!(𝒰TV safeA safeB from 0 to 9 at 0)
+;;safeB is fulfilled in t=6 for first time, however A does not hold so safeA does not
+;;meaning 0, 2, 4 is positive evidence (safe and A), and 7, 8, 9 despite 7 and 9 not being safe
+;!(∧TV (𝒰TV A B from 0 to 9 at 0) (□TV safe from 0 to 9 at 0))
+;;here 0, 2, 4 is positive evidence, and 8.
+;;Additionally 6 is positive evidence, as 6 is safe, and B is fulfilled at 5 already
+
+;(= (BC) (𝒰 B C from 0 to 179 at 0))
+;(= (nestedABC) (𝒰 A nestedBC from 0 to 179 at 0))
+
+;!(Truth_fromSets (𝒰TV safeA safeB from 0 to 9 at 0))
+;!(∧TV (□TV safe from 0 to 179 at 0) (∧TV (𝒰TV A B from 0 to 179 at 0) (𝒰TV B C from 0 to 179 at 0)))
+;!(Truth_fromSets (∧TV (□TV safe from 0 to 179 at 0) (∧TV (𝒰TV A B from 0 to 179 at 0) (𝒰TV B C from 0 to 179 at 0))))
+
+;!(Truth_fromSets (∧TV (□TV safe from 0 to 179 at 0) (∧TV (𝒰TV A B from 0 to 179 at 0) (𝒰TV B C from 0 to 179 at 0))))
+
